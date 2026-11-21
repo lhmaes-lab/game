@@ -292,6 +292,12 @@ select option{color:#04121f}
           <option value="medium">Gemiddeld</option>
           <option value="high">Hoog</option>
         </select>
+        <label for="selCamP">Camera</label>
+        <select id="selCamP">
+          <option value="dicht">Dichtbij</option>
+          <option value="normaal">Normaal</option>
+          <option value="ver">Ver weg</option>
+        </select>
         <label class="switch"><input type="checkbox" id="chkMusicP"> Muziek</label>
         <label class="switch"><input type="checkbox" id="chkSfxP"> Geluid</label>
       </div>
@@ -938,14 +944,14 @@ Game.prototype.checkMissions = function(){
 };
 
 var SAVE_KEY = 'azureRushSaveV1';
-function defaultSave(){ return { best:0, unlocked:1, world:1, quality:'high', music:true, sfx:true }; }
+function defaultSave(){ return { best:0, unlocked:1, world:1, quality:'high', music:true, sfx:true, cam:'normaal' }; }
 function loadSave(storage){
   try {
     var raw = storage.getItem(SAVE_KEY);
     if (!raw) return defaultSave();
     var o = JSON.parse(raw);
     var d = defaultSave();
-    return { best:+(o.best)||0, unlocked:clamp(o.unlocked|0,1,999), world:clamp(o.world|0,1,9), quality:['low','medium','high'].indexOf(o.quality)>=0?o.quality:'high', music:o.music!==false, sfx:o.sfx!==false };
+    return { best:+(o.best)||0, unlocked:clamp(o.unlocked|0,1,999), world:clamp(o.world|0,1,9), quality:['low','medium','high'].indexOf(o.quality)>=0?o.quality:'high', music:o.music!==false, sfx:o.sfx!==false, cam:['dicht','normaal','ver'].indexOf(o.cam)>=0?o.cam:'normaal' };
   } catch(e){ return defaultSave(); }
 }
 function storeSave(storage, s){
@@ -1454,10 +1460,11 @@ function updateChar(dt){
   var game = R.game, p = game.player;
   var c = R.char, ud = c.userData;
   var F = game.track.frameAt(p.s);
+  var fr = F.r.slice(), fu = F.u.slice(), ft = F.t.slice();
   var wp = game.track.worldPos(p.s, p.x, p.y + 0.02);
   c.position.set(wp[0], wp[1], wp[2]);
   var m = new THREE.Matrix4();
-  var rx = F.r[0], ry=F.r[1], rz=F.r[2], ux=F.u[0], uy=F.u[1], uz=F.u[2], tx=F.t[0], ty=F.t[1], tz=F.t[2];
+  var rx = fr[0], ry=fr[1], rz=fr[2], ux=fu[0], uy=fu[1], uz=fu[2], tx=ft[0], ty=ft[1], tz=ft[2];
   var rollAng = 0;
   if (p.homing){ rollAng = game.time*40; }
   if (p.rollT>0 || p.grind || (p.dashT>0 && p.grounded)) rollAng = game.time*22;
@@ -1483,12 +1490,15 @@ function updateChar(dt){
 
 function updateCamera(dt){
   var game = R.game, p = game.player, cam = R.camera;
-  var back = 7.2, up = 2.9;
-  var Fb = game.track.frameAt(p.s - back);
+  var cz = (UI.save.cam==='ver') ? {back:11.5, up:4.6} : (UI.save.cam==='dicht') ? {back:6.0, up:2.5} : {back:8.8, up:3.5};
+  var back = cz.back, up = cz.up;
+  var behind = Math.max(0, back - p.s);
+  var Fb = game.track.frameAt(Math.max(0, p.s - back));
+  var bp = Fb.p.slice(), bu = Fb.u.slice(), br = Fb.r.slice(), bt = Fb.t.slice();
   var Ff = game.track.frameAt(p.s + 7);
-  var tx = Fb.p[0]+Fb.u[0]*up + Fb.r[0]*p.x*0.25;
-  var ty = Fb.p[1]+Fb.u[1]*up + Fb.r[1]*p.x*0.25;
-  var tz = Fb.p[2]+Fb.u[2]*up + Fb.r[2]*p.x*0.25;
+  var tx = bp[0]+bu[0]*up + br[0]*p.x*0.25 - bt[0]*behind;
+  var ty = bp[1]+bu[1]*up + br[1]*p.x*0.25 - bt[1]*behind;
+  var tz = bp[2]+bu[2]*up + br[2]*p.x*0.25 - bt[2]*behind;
   var k = 1 - Math.exp(-dt*7.5);
   R.camPos.x += (tx-R.camPos.x)*k; R.camPos.y += (ty-R.camPos.y)*k; R.camPos.z += (tz-R.camPos.z)*k;
   var look = new THREE.Vector3(Ff.p[0]+Ff.r[0]*p.x*0.55, Ff.p[1]+Ff.u[1]*1.4+Ff.r[1]*p.x*0.55, Ff.p[2]);
@@ -1922,8 +1932,9 @@ function wireUI(){
   $('btnPause').addEventListener('click', function(){ if (UI.phase==='play') pauseGame(); else if (UI.phase==='pause') resumeGame(); });
   $('btnSfx').addEventListener('click', function(){ setSfx(!AU.sfxOn); UI.save.sfx = AU.sfxOn; persist(); syncAudioBtns(); if (AU.sfxOn) SFX.click(); });
   $('btnMusic').addEventListener('click', function(){ setMusic(!AU.musicOn); UI.save.music = AU.musicOn; persist(); syncAudioBtns(); });
-  function syncQualitySel(){ $('selQualityP').value = UI.save.quality; }
+  function syncQualitySel(){ $('selQualityP').value = UI.save.quality; $('selCamP').value = UI.save.cam; }
   $('selQualityP').addEventListener('change', function(){ UI.save.quality = this.value; persist(); applyQuality(this.value); });
+  $('selCamP').addEventListener('change', function(){ UI.save.cam = this.value; persist(); });
   $('chkMusicP').addEventListener('change', function(){ setMusic(this.checked); UI.save.music = this.checked; persist(); syncAudioBtns(); });
   $('chkSfxP').addEventListener('change', function(){ setSfx(this.checked); UI.save.sfx = this.checked; persist(); syncAudioBtns(); });
   UI._syncQualitySel = syncQualitySel;
