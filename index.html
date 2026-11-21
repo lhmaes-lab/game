@@ -1069,18 +1069,17 @@ function buildChunk(group, s0){
     cA.copy(cTop).multiplyScalar(strip? 0.93 : 1.0);
     fr.push({ L:L, R:Rr, Li:Li, Ri:Ri, Lo:Lo, Ro:Ro, c:cA.clone(), rail:F.rail });
   }
-  function quad4(a, b, cA2, cB2, getA, getB){
-    var a0=getA(a,0), a1=getA(a,1), b0=getB(b,0), b1=getB(b,1);
-    var v0=pushVert(a0,cA2), v1=pushVert(a1,cA2), v2=pushVert(b1,cB2), v3=pushVert(b0,cB2);
+  function quad4(p00, p01, p10, p11, c){
+    var v0=pushVert(p00,c), v1=pushVert(p01,c), v2=pushVert(p11,c), v3=pushVert(p10,c);
     idx.push(v0,v1,v2, v0,v2,v3);
   }
   for (i=0;i<n;i++){
     var A=fr[i], B=fr[i+1];
-    quad4(A,B,A.c,B.c, function(f){return f.L;}, function(f){return f.R;});
-    quad4(A,B,cEdge,cEdge, function(f){return f.L;}, function(f){return f.Li;});
-    quad4(A,B,cEdge,cEdge, function(f){return f.Ri;}, function(f){return f.R;});
-    quad4(A,B,cSide,cSide, function(f){return f.L;}, function(f){return f.Lo;});
-    quad4(A,B,cSide,cSide, function(f){return f.Ro;}, function(f){return f.R;});
+    quad4(A.L, A.R, B.R, B.L, A.c);
+    quad4(A.L, A.Li, B.Li, B.L, cEdge);
+    quad4(A.Ri, A.R, B.R, B.Ri, cEdge);
+    quad4(A.L, B.L, B.Lo, A.Lo, cSide);
+    quad4(A.R, A.Ro, B.Ro, B.R, cSide);
   }
   var g = new THREE.BufferGeometry();
   g.setAttribute('position', new THREE.Float32BufferAttribute(pos,3));
