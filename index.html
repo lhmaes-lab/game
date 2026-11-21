@@ -968,7 +968,7 @@ var CORE = {
 };
 if (typeof globalThis!=='undefined') globalThis.AZURE_CORE = CORE;
 var R = null;
-var QUALITY = { low:{pr:0.66, shadow:false, mapSize:0, dist:240, deco:0.35, parts:0.4}, medium:{pr:1.0, shadow:true, mapSize:1024, dist:340, deco:0.65, parts:0.7}, high:{pr:1.5, shadow:true, mapSize:2048, dist:470, deco:1.0, parts:1.0} };
+var QUALITY = { low:{pr:0.66, shadow:false, mapSize:0, dist:280, deco:0.4, parts:0.4}, medium:{pr:1.0, shadow:true, mapSize:1024, dist:410, deco:0.7, parts:0.7}, high:{pr:1.5, shadow:true, mapSize:2048, dist:560, deco:1.0, parts:1.0} };
 var CHUNK = 100;
 
 function ensureRender(canvas){
@@ -996,6 +996,9 @@ function ensureRender(canvas){
   });
   var sky = new THREE.Mesh(new THREE.SphereGeometry(950, 24, 14), skyMat);
   scene.add(sky);
+  var sunDisc = new THREE.Mesh(new THREE.CircleGeometry(55, 32), new THREE.MeshBasicMaterial({ color:0xfff6d8, fog:false, transparent:true, opacity:0.95 }));
+  sunDisc.renderOrder = -1;
+  scene.add(sunDisc);
   var ground = new THREE.Mesh(new THREE.PlaneGeometry(1800,1800), new THREE.MeshLambertMaterial({ color:0x1fb6c9 }));
   ground.rotation.x = -Math.PI/2; ground.receiveShadow = true;
   scene.add(ground);
@@ -1005,7 +1008,7 @@ function ensureRender(canvas){
   R = { renderer:renderer, scene:scene, camera:camera, hemi:hemi, sun:sun, sky:sky, skyMat:skyMat, ground:ground, water:water,
     chunks:[], chunkPool:[], trackMat:null, edgeMat:null, sideMat:null, railMat:null,
     pools:{}, meshes:{}, char:null, parts:null, lines:null, reticle:null, bossMesh:null,
-    camPos:new THREE.Vector3(0,4,10), camLook:new THREE.Vector3(0,1,-10), fov:62, shake:0, worldIdx:-1, quality:'high' };
+    camPos:new THREE.Vector3(0,4,10), camLook:new THREE.Vector3(0,1,-10), fov:64, shake:0, worldIdx:-1, quality:'high', sunDisc:sunDisc };
   R.trackMat = new THREE.MeshLambertMaterial({ vertexColors:true });
   R.edgeMat = new THREE.MeshBasicMaterial({ vertexColors:true });
   R.railMat = new THREE.MeshLambertMaterial({ color:0xffd23e, emissive:0x664400 });
@@ -1023,7 +1026,7 @@ function applyWorld(wi){
   var w = CORE.WORLDS[wi];
   R.skyMat.uniforms.top.value.setHex(w.skyTop);
   R.skyMat.uniforms.bot.value.setHex(w.skyBot);
-  R.scene.fog = new THREE.Fog(w.fog, w.fogNear, w.fogFar);
+  R.scene.fog = new THREE.Fog(w.fog, w.fogNear*1.7, Math.min(w.fogFar*1.55, (QUALITY[R.quality||'high'].dist)*0.98));
   R.hemi.color.setHex(w.hemiSky); R.hemi.groundColor.setHex(w.hemiGround); R.hemi.intensity = 1.0;
   R.sun.color.setHex(w.sun); R.sun.intensity = w.sunInt;
   R.ground.material.color.setHex(w.ground);
@@ -1067,19 +1070,32 @@ function buildChunk(group, s0){
     var Ro = [Rr[0]+r[0]*0.6-u[0]*skirt, Rr[1]+r[1]*0.6-u[1]*skirt, Rr[2]+r[2]*0.6-u[2]*skirt];
     var strip = (Math.floor(s/8)%2===0);
     cA.copy(cTop).multiplyScalar(strip? 0.93 : 1.0);
-    fr.push({ L:L, R:Rr, Li:Li, Ri:Ri, Lo:Lo, Ro:Ro, c:cA.clone(), rail:F.rail });
+    fr.push({ L:L, R:Rr, Li:Li, Ri:Ri, Lo:Lo, Ro:Ro, c:cA.clone(), rail:F.rail, surf:F.surf });
   }
   function quad4(p00, p01, p10, p11, c){
     var v0=pushVert(p00,c), v1=pushVert(p01,c), v2=pushVert(p11,c), v3=pushVert(p10,c);
     idx.push(v0,v1,v2, v0,v2,v3);
   }
+  var cLane = new THREE.Color(w.track).multiplyScalar(1.25);
   for (i=0;i<n;i++){
     var A=fr[i], B=fr[i+1];
-    quad4(A.L, A.R, B.R, B.L, A.c);
-    quad4(A.L, A.Li, B.Li, B.L, cEdge);
-    quad4(A.Ri, A.R, B.R, B.Ri, cEdge);
-    quad4(A.L, B.L, B.Lo, A.Lo, cSide);
-    quad4(A.R, A.Ro, B.Ro, B.R, cSide);
+    if (A.surf && B.surf){
+      quad4(A.L, A.R, B.R, B.L, A.c);
+      quad4(A.L, A.Li, B.Li, B.L, cEdge);
+      quad4(A.Ri, A.R, B.R, B.Ri, cEdge);
+      var lm1 = 1.3;
+      var lA = [A.L[0] + (A.R[0]-A.L[0]) * (lm1/6.8*2), A.L[1] + (A.R[1]-A.L[1]) * (lm1/6.8*2), A.L[2] + (A.R[2]-A.L[2]) * (lm1/6.8*2)];
+      var lB = [B.L[0] + (B.R[0]-B.L[0]) * (lm1/6.8*2), B.L[1] + (B.R[1]-B.L[1]) * (lm1/6.8*2), B.L[2] + (B.R[2]-B.L[2]) * (lm1/6.8*2)];
+      var rA = [A.L[0] + (A.R[0]-A.L[0]) * (1 - lm1/6.8*2), A.L[1] + (A.R[1]-A.L[1]) * (1 - lm1/6.8*2), A.L[2] + (A.R[2]-A.L[2]) * (1 - lm1/6.8*2)];
+      var rB = [B.L[0] + (B.R[0]-B.L[0]) * (1 - lm1/6.8*2), B.L[1] + (B.R[1]-B.L[1]) * (1 - lm1/6.8*2), B.L[2] + (B.R[2]-B.L[2]) * (1 - lm1/6.8*2)];
+      var w=0.14;
+      quad4([lA[0]-w, lA[1]+0.02, lA[2]], [lA[0]+w, lA[1]+0.02, lA[2]], [lB[0]+w, lB[1]+0.02, lB[2]], [lB[0]-w, lB[1]+0.02, lB[2]], cLane);
+      quad4([rA[0]-w, rA[1]+0.02, rA[2]], [rA[0]+w, rA[1]+0.02, rA[2]], [rB[0]+w, rB[1]+0.02, rB[2]], [rB[0]-w, rB[1]+0.02, rB[2]], cLane);
+    }
+    if (A.surf || B.surf){
+      quad4(A.L, B.L, B.Lo, A.Lo, cSide);
+      quad4(A.R, A.Ro, B.Ro, B.R, cSide);
+    }
   }
   var g = new THREE.BufferGeometry();
   g.setAttribute('position', new THREE.Float32BufferAttribute(pos,3));
@@ -1113,14 +1129,14 @@ function decoFor(kind, group, s0, s1){
   var rng = CORE.mulberry32((s0|0)^0xdecaf);
   var track = R.game.track;
   var density = QUALITY[R.quality].deco;
-  var n = Math.floor((s1-s0)/9 * density);
+  var n = Math.floor((s1-s0)/7 * density);
   var i, s, F, side, off, y;
   function place(mesh, x, yy, zz){ mesh.position.set(x,yy,zz); group.add(mesh); }
   for (i=0;i<n;i++){
     s = s0 + rng()*(s1-s0);
     F = track.frameAt(Math.min(s, track.length-1));
     side = rng()<0.5?-1:1;
-    off = 7 + rng()*36;
+    off = 5.5 + rng()*30;
     var x = F.p[0] + F.r[0]*side*off, z = F.p[2] + F.r[2]*side*off;
     var yBase = (off < 13) ? F.p[1] : R.ground.position.y + 0.15;
     var g = null;
@@ -1494,7 +1510,7 @@ function updateCamera(dt){
   var behind = Math.max(0, back - p.s);
   var Fb = game.track.frameAt(Math.max(0, p.s - back));
   var bp = Fb.p.slice(), bu = Fb.u.slice(), br = Fb.r.slice(), bt = Fb.t.slice();
-  var Ff = game.track.frameAt(p.s + 7);
+  var Ff = game.track.frameAt(p.s + 10);
   var tx = bp[0]+bu[0]*up + br[0]*p.x*0.25 - bt[0]*behind;
   var ty = bp[1]+bu[1]*up + br[1]*p.x*0.25 - bt[1]*behind;
   var tz = bp[2]+bu[2]*up + br[2]*p.x*0.25 - bt[2]*behind;
@@ -1508,12 +1524,17 @@ function updateCamera(dt){
   var sx = reduce?0:(Math.random()-0.5)*shake*0.5, sy = reduce?0:(Math.random()-0.5)*shake*0.4;
   cam.position.set(R.camPos.x+sx, R.camPos.y+sy, R.camPos.z);
   cam.lookAt(R.camLook.x, R.camLook.y, R.camLook.z);
-  var targetFov = 62 + clamp(p.speed-16, 0, 30)*0.55 + (p.dashT>0?9:0);
-  R.fov += (clamp(targetFov, 62, 92)-R.fov)*Math.min(1, dt*4);
+  var targetFov = 64 + clamp(p.speed-16, 0, 30)*0.55 + (p.dashT>0?9:0);
+  R.fov += (clamp(targetFov, 64, 94)-R.fov)*Math.min(1, dt*4);
   if (Math.abs(cam.fov-R.fov)>0.05){ cam.fov=R.fov; cam.updateProjectionMatrix(); }
   R.sun.position.set(R.camPos.x+30, R.camPos.y+60, R.camPos.z-20);
   R.sun.target.position.set(R.camPos.x, R.camPos.y, R.camPos.z);
   R.sky.position.set(R.camPos.x, 0, R.camPos.z);
+  if (R.sunDisc){
+    var sd = CORE.vnorm([0.45, 0.55, -0.7]);
+    R.sunDisc.position.set(R.camPos.x + sd[0]*850, sd[1]*850, R.camPos.z + sd[2]*850);
+    R.sunDisc.lookAt(R.camPos.x, R.camPos.y, R.camPos.z);
+  }
   var gs = 25;
   R.ground.position.x = Math.round(R.camPos.x/gs)*gs; R.ground.position.z = Math.round(R.camPos.z/gs)*gs;
   R.water.position.x = R.ground.position.x; R.water.position.z = R.ground.position.z;
